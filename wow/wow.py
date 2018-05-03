@@ -12,24 +12,34 @@ import traceback
 import argparse
 import subprocess as sp
 import unicodedata
+import tempfile
 
 from os.path import dirname, join
-
+import linecache
 import lala
 
-ROOT = join(dirname(__file__), 'static')
+# ROOT = join(dirname(__file__),'./')
+ROOTSTATIC = join(dirname(__file__), 'static')
 DEFAULT_WOW = 'pei.txt'
 DEFAULT_DOGE = join(dirname(__file__),'static/doge.jpeg')
 
+global TEMP
+
+class TestException(Exception):
+    pass
 
 class Wow(object):
     def __init__(self, tty, ns):
         self.tty = tty
         self.ns = ns
-        if self.ns.img2xterm:
-            self.wow_path = join(ROOT, ns.img2xterm_img or DEFAULT_DOGE)
+        if self.ns.no_output:
+            TE = TEMP.split('/')[-1]
+            self.wow_path = TE
         else:
-            self.wow_path = join(ROOT, ns.wow_path or DEFAULT_WOW)
+            if self.ns.img2xterm:
+                self.wow_path = join(ROOTSTATIC, ns.img2xterm_img or DEFAULT_DOGE)
+            else:
+                self.wow_path = join(ROOTSTATIC, ns.wow_path or DEFAULT_WOW)
         if ns.frequency:
             # such frequency based
             self.words = \
@@ -38,10 +48,13 @@ class Wow(object):
             self.words = lala.WowDeque(*lala.WORD_LIST)
         # self.doge_path = join(ROOT,ns.wow)
 
+        
+
     def setup(self):
         if self.tty.pretty:
             # stdout is a tty, load Shibe and calculate how wide he is
             wow = self.load_wow()
+            # print('wow:',wow) # []
             max_wow = max(map(clean_len, wow))
         else:
             # stdout is being piped and we should not load Shibe
@@ -50,8 +63,8 @@ class Wow(object):
 
         if self.tty.width < max_wow:
             # Shibe won't fit, so abort.
-            sys.stderr.write('终端太小了\n')
-            sys.stderr.write('图案无法在 {0} 列下呈现\n'.format(max_wow))
+            sys.stderr.write('guna！这么小的终端\n')
+            sys.stderr.write('没有猛男能在 {0} 列下存在\n'.format(max_wow))
             sys.exit(1)
 
         # Check for prompt height so that we can fill the screen minus how high
@@ -108,8 +121,14 @@ class Wow(object):
 
         if self.ns.no_shibe:
             return ['']
+        
+        # ex=os.path.exists(self.wow_path)
+        # print(ex)
+        # print('loadwow:',self.wow_path)
+        # size = os.path.getsize(self.wow_path)
+        # print('size:',size)
 
-        with open(self.wow_path) as f:
+        with open(self.wow_path,'r+') as f:
             if sys.version_info < (3, 0):
                 if locale.getpreferredencoding() == 'UTF-8':
                     wow_lines = [' '*(self.tty.width-57) + l.decode('utf-8') for l in f.xreadlines()]
@@ -392,7 +411,13 @@ def setup_arguments():
         '--shibe',
         help='lala shibe file',
         dest='wow_path',
-        choices=os.listdir(ROOT)
+        choices=os.listdir(ROOTSTATIC)
+    )
+
+    parser.add_argument(
+        '-no','--no_output',
+        help='no output file',
+        action="store_true"
     )
 
     parser.add_argument(
@@ -454,7 +479,7 @@ def setup_arguments():
         '-ixtm','--img2xterm_img',
         help='img2xterm\'s target image(default ROOT)',
         dest='wow_path',
-        choices=os.listdir(ROOT)
+        choices=os.listdir(ROOTSTATIC)
     )
     return parser
 
@@ -508,6 +533,7 @@ def main():
             "/usr/bin/locale"
         )
         return 1
+    os.remove(TEMP)
 
 
 # lala very main
@@ -517,12 +543,37 @@ if __name__ == "__main__":
     parser = setup_arguments()
     ns = parser.parse_args()
     # print('ns:',ns)
-    if ns.wow_path:
-        Path = join(dirname(__file__),'static/'+ns.wow_path)
+    if ns.no_output:
+        temp = tempfile.NamedTemporaryFile(dir=os.path.dirname(__file__),suffix='.txt',delete=None)
+        # os.rename(temp.name,temp.name+'.txt')
+        if ns.wow_path:
+            Path = join(dirname(__file__),'static/'+ns.wow_path)
         # Path = ns.wow_path 
+        else:
+            Path = DEFAULT_DOGE
+        try:
+            os.system('img2xterm -p'+' '+Path+ ' ' +temp.name)
+            # sp.Popen(['img2xterm','-p',Path,temp.name],close_fds=True)
+            temp.seek(0)
+            # print('output:',temp.name)
+        except IOError:
+            sys.stderr.write("can’t read file"+os.linesep)
+        except TestException:
+            sys.stderr.write("TestException occurred in inner_suite"+os.linesep)
+        finally:
+            temp.close()
+            TEMP = temp.name
+            sys.exit(main())
+            
     else:
-        Path = DEFAULT_DOGE
-    if ns.img2xterm is True:
-            os.system('img2xterm'+' '+Path)
-    else:
-        sys.exit(main())
+        if ns.wow_path:
+            Path = join(dirname(__file__),'static/'+ns.wow_path)
+        # Path = ns.wow_path 
+        else:
+            Path = DEFAULT_DOGE
+        if ns.img2xterm is True:
+                os.system('img2xterm'+' '+Path)
+        else:
+            sys.exit(main())
+
+    # sys.exit(main())
